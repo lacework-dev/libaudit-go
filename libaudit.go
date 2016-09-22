@@ -176,7 +176,7 @@ func nlmAlignOf(msglen int) int {
 }
 
 // Parse a byte stream to an array of NetlinkMessage structs
-func parseAuditNetlinkMessage(b []byte) ([]NetlinkMessage, error) {
+func ParseAuditNetlinkMessage(b []byte) ([]NetlinkMessage, error) {
 
 	var (
 		msgs []NetlinkMessage
@@ -274,7 +274,7 @@ func (s *NetlinkConnection) Receive(bytesize int, block int) ([]NetlinkMessage, 
 		return nil, errors.Wrap(err, "message length shorter than expected")
 	}
 	rb = rb[:nr]
-	return parseAuditNetlinkMessage(rb)
+	return ParseAuditNetlinkMessage(rb)
 }
 
 // GetPID returns the PID of the program socket is configured to talk to
@@ -291,7 +291,7 @@ func (s *NetlinkConnection) GetPID() (int, error) {
 func auditGetReply(s Netlink, bytesize, block int, seq uint32) error {
 done:
 	for {
-		msgs, err := s.Receive(bytesize, block) //parseAuditNetlinkMessage(rb)
+		msgs, err := s.Receive(bytesize, block) //ParseAuditNetlinkMessage(rb)
 		if err != nil {
 			return errors.Wrap(err, "auditGetReply failed")
 		}
@@ -358,12 +358,12 @@ func AuditSetEnabled(s Netlink, enabled int) error {
 
 // AuditIsEnabled returns 0 if audit is not enabled and
 // 1 if enabled, and -1 on failure.
-func AuditIsEnabled(s Netlink) (state int, err error) {
+func AuditIsEnabled(s Netlink) (state int, pid int, err error) {
 	var status auditStatus
 
 	wb := newNetlinkAuditRequest(uint16(AUDIT_GET), syscall.AF_NETLINK, 0)
 	if err = s.Send(wb); err != nil {
-		return -1, errors.Wrap(err, "AuditIsEnabled failed")
+		return -1, -1, errors.Wrap(err, "AuditIsEnabled failed")
 	}
 
 done:
@@ -372,21 +372,21 @@ done:
 		// msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, syscall.MSG_DONTWAIT)
 		msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, 0)
 		if err != nil {
-			return -1, errors.Wrap(err, "AuditIsEnabled failed")
+			return -1, -1, errors.Wrap(err, "AuditIsEnabled failed")
 		}
 
 		for _, m := range msgs {
-			socketPID, err := s.GetPID()
+			//socketPID, err := s.GetPID()
 			if err != nil {
-				return -1, errors.Wrap(err, "AuditIsEnabled: GetPID failed")
+				return -1, -1, errors.Wrap(err, "AuditIsEnabled: GetPID failed")
 			}
 			if m.Header.Seq != uint32(wb.Header.Seq) {
 
-				return -1, fmt.Errorf("AuditIsEnabled: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
+				return -1, -1, fmt.Errorf("AuditIsEnabled: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
 			}
-			if int(m.Header.Pid) != socketPID {
-				return -1, fmt.Errorf("AuditIsEnabled: Wrong PID %d, expected %d", m.Header.Pid, socketPID)
-			}
+			//if int(m.Header.Pid) != socketPID {
+			//	return -1, -1, fmt.Errorf("AuditIsEnabled: Wrong PID %d, expected %d", m.Header.Pid, socketPID)
+			//}
 			if m.Header.Type == syscall.NLMSG_DONE {
 				break done
 			} else if m.Header.Type == syscall.NLMSG_ERROR {
@@ -404,14 +404,15 @@ done:
 				buf := bytes.NewBuffer(m.Data[:])
 				err = binary.Read(buf, nativeEndian(), &status)
 				if err != nil {
-					return -1, errors.Wrap(err, "AuditIsEnabled: binary read into auditStatus failed")
+					return -1, -1, errors.Wrap(err, "AuditIsEnabled: binary read into auditStatus failed")
 				}
 				state = int(status.Enabled)
-				return state, nil
+				pid = int(status.Pid)
+				return state, pid, nil
 			}
 		}
 	}
-	return -1, nil
+	return -1, -1, nil
 }
 
 // AuditSetPID sends a message to kernel for setting of program PID
