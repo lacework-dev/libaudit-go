@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lacework/libaudit-go/headers"
 	"github.com/lunixbochs/struc"
-	"github.com/mozilla/libaudit-go/headers"
 	"github.com/pkg/errors"
 )
 
