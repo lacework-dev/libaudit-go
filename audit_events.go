@@ -16,6 +16,7 @@ type EventCallback func(*AuditEvent, error, ...interface{})
 // RawEventCallback is similar to EventCallback and provides a function signature but the difference is that the function
 // will receive only the message string which contains the audit event and not the parsed AuditEvent struct.
 type RawEventCallback func(string, error, ...interface{})
+type RawEventTypeCallback func(uint16, string, error, ...interface{})
 
 // AuditEvent holds a parsed audit message.
 // Serial holds the serial number for the message.
@@ -104,6 +105,30 @@ func GetRawAuditEvents(s Netlink, cb RawEventCallback, args ...interface{}) {
 			}
 		}
 	}()
+}
+
+// GetRawAuditEvents receives raw audit messages from kernel parses them to AuditEvent struct.
+// It passes them along the callback function and if any error occurs while receiving the message,
+// the same will be passed in the callback as well.
+// Code that receives the message runs inside a go-routine.
+func GetRawAuditMessages(s Netlink, cb RawEventTypeCallback, done *chan bool, args ...interface{}) {
+	for {
+		select {
+		case <-*done:
+			return
+		default:
+			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0)
+			for _, msg := range msgs {
+				if msg.Header.Type == syscall.NLMSG_ERROR {
+					v := int32(nativeEndian().Uint32(msg.Data[0:4]))
+					if v != 0 {
+						cb(msg.Header.Type, string(msg.Data[:]), fmt.Errorf("error receiving events %d", v), args...)
+					}
+				}
+				cb(msg.Header.Type, string(msg.Data[:]), nil, args...)
+			}
+		}
+	}
 }
 
 // GetAuditMessages is a blocking function (runs in forever for loop) that

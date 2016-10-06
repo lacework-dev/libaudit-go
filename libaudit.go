@@ -488,3 +488,28 @@ func AuditSetBacklogLimit(s Netlink, limit int) error {
 	return nil
 
 }
+
+// AuditSetBacklogLimit sets backlog limit for audit messages from kernel
+func AuditSetFlags(s Netlink, flag int) error {
+	var status auditStatus
+	status.Mask = AUDIT_STATUS_FAILURE
+	status.Failure = (uint32)(flag)
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, nativeEndian(), status)
+	if err != nil {
+		return errors.Wrap(err, "AuditSetFlags: binary write from auditStatus failed")
+	}
+
+	wb := newNetlinkAuditRequest(uint16(AUDIT_SET), syscall.AF_NETLINK, int(unsafe.Sizeof(status)))
+	wb.Data = append(wb.Data, buff.Bytes()[:]...)
+	if err := s.Send(wb); err != nil {
+		return errors.Wrap(err, "AuditSetFlags failed")
+	}
+
+	err = auditGetReply(s, syscall.Getpagesize(), 0, wb.Header.Seq)
+	if err != nil {
+		return errors.Wrap(err, "AuditSetFlags failed")
+	}
+	return nil
+
+}
