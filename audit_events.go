@@ -55,7 +55,7 @@ func GetAuditEvents(s Netlink, cb EventCallback, args ...interface{}) {
 		for {
 			select {
 			default:
-				msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0)
+				msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 				for _, msg := range msgs {
 					if msg.Header.Type == syscall.NLMSG_ERROR {
 						err := int32(nativeEndian().Uint32(msg.Data[0:4]))
@@ -81,7 +81,7 @@ func GetRawAuditEvents(s Netlink, cb RawEventCallback, args ...interface{}) {
 		for {
 			select {
 			default:
-				msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0)
+				msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 				for _, msg := range msgs {
 					var (
 						m   string
@@ -112,12 +112,14 @@ func GetRawAuditEvents(s Netlink, cb RawEventCallback, args ...interface{}) {
 // the same will be passed in the callback as well.
 // Code that receives the message runs inside a go-routine.
 func GetRawAuditMessages(s Netlink, cb RawEventTypeCallback, done *chan bool, args ...interface{}) {
+	rb := make([]byte, MAX_AUDIT_MESSAGE_LENGTH)
+
 	for {
 		select {
 		case <-*done:
 			return
 		default:
-			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0)
+			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
 			for _, msg := range msgs {
 				if msg.Header.Type == syscall.NLMSG_ERROR {
 					v := int32(nativeEndian().Uint32(msg.Data[0:4]))
@@ -142,7 +144,7 @@ func GetAuditMessages(s Netlink, cb EventCallback, done *chan bool, args ...inte
 		case <-*done:
 			return
 		default:
-			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0)
+			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 			for _, msg := range msgs {
 				if msg.Header.Type == syscall.NLMSG_ERROR {
 					v := int32(nativeEndian().Uint32(msg.Data[0:4]))

@@ -134,7 +134,7 @@ type Netlink interface {
 	Send(request *NetlinkMessage) error
 	// Receive requires bytesize which specify the buffer size for incoming message and block which specify the mode for
 	// reception (blocking and nonblocking)
-	Receive(bytesize int, block int) ([]NetlinkMessage, error)
+	Receive(bytesize int, block int, rb []byte) ([]NetlinkMessage, error)
 	// GetPID returns the PID of the program the socket is being used to talk to
 	// in our case we talk to the kernel so it is set to 0
 	GetPID() (int, error)
@@ -263,8 +263,10 @@ func (s *NetlinkConnection) Send(request *NetlinkMessage) error {
 }
 
 // Receive is a wrapper for recieving from netlink socket and return an array of NetlinkMessage
-func (s *NetlinkConnection) Receive(bytesize int, block int) ([]NetlinkMessage, error) {
-	rb := make([]byte, bytesize)
+func (s *NetlinkConnection) Receive(bytesize int, block int, rb []byte) ([]NetlinkMessage, error) {
+	if rb == nil {
+		rb = make([]byte, bytesize)
+	}
 	nr, _, err := syscall.Recvfrom(s.fd, rb, 0|block)
 
 	if err != nil {
@@ -291,7 +293,7 @@ func (s *NetlinkConnection) GetPID() (int, error) {
 func auditGetReply(s Netlink, bytesize, block int, seq uint32) error {
 done:
 	for {
-		msgs, err := s.Receive(bytesize, block) //ParseAuditNetlinkMessage(rb)
+		msgs, err := s.Receive(bytesize, block, nil) //ParseAuditNetlinkMessage(rb)
 		if err != nil {
 			return errors.Wrap(err, "auditGetReply failed")
 		}
@@ -370,7 +372,7 @@ done:
 	for {
 		// MSG_DONTWAIT has implications on systems with low memory and CPU
 		// msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, syscall.MSG_DONTWAIT)
-		msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, 0)
+		msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 		if err != nil {
 			return -1, -1, errors.Wrap(err, "AuditIsEnabled failed")
 		}
