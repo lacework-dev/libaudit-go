@@ -18,11 +18,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-var rulesRetrieved auditRuleData
+var rulesRetrieved AuditRuleData
 
 // auditRuleData stores rule information
 // replication of c struct audit_rule_data
-type auditRuleData struct {
+type AuditRuleData struct {
 	Flags      uint32                     `struc:"uint32,little"` // AUDIT_PER_{TASK,CALL}, AUDIT_PREPEND
 	Action     uint32                     `struc:"uint32,little"` // AUDIT_NEVER, AUDIT_POSSIBLE, AUDIT_ALWAYS
 	FieldCount uint32                     `struc:"uint32,little"`
@@ -36,7 +36,7 @@ type auditRuleData struct {
 
 // toWireFormat converts a auditRuleData to byte stream
 // relies on unsafe conversions
-func (rule *auditRuleData) toWireFormat() []byte {
+func (rule *AuditRuleData) toWireFormat() []byte {
 
 	newbuff := make([]byte, int(unsafe.Sizeof(*rule))-int(unsafe.Sizeof(rule.Buf))+int(rule.Buflen))
 	*(*uint32)(unsafe.Pointer(&newbuff[0:4][0])) = rule.Flags
@@ -52,7 +52,7 @@ func (rule *auditRuleData) toWireFormat() []byte {
 }
 
 // auditDeleteRuleData deletes a rule from audit in kernel
-func auditDeleteRuleData(s Netlink, rule *auditRuleData, flags uint32, action uint32) error {
+func auditDeleteRuleData(s Netlink, rule *AuditRuleData, flags uint32, action uint32) error {
 	if flags == AUDIT_FILTER_ENTRY {
 		return errors.Wrap(errEntryDep, "auditDeleteRuleData failed")
 	}
@@ -66,6 +66,57 @@ func auditDeleteRuleData(s Netlink, rule *auditRuleData, flags uint32, action ui
 	newwb.Data = append(newwb.Data, newbuff[:]...)
 	if err := s.Send(newwb); err != nil {
 		return errors.Wrap(err, "auditDeleteRuleData failed")
+	}
+	return nil
+}
+
+func compareAuditRule(a, b *AuditRuleData) bool {
+	if a.Flags == b.Flags && a.Action == b.Action && a.FieldCount == b.FieldCount && a.Mask == b.Mask && a.Fields == b.Fields && a.Values == b.Values && a.Fieldflags == b.Fieldflags {
+		if bytes.Equal(a.Buf, b.Buf) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAuditRulePresent(a *AuditRuleData, b []*AuditRuleData) bool {
+	for _, r := range b {
+		if compareAuditRule(a, r) == true {
+			return true
+		}
+	}
+	return false
+}
+
+func RemoveOverlappingAuditRules(set, subset []*AuditRuleData) []*AuditRuleData {
+	if len(set) != 0 && len(subset) != 0 {
+	restart:
+		for i := range subset {
+			if isAuditRulePresent(subset[i], set) == true {
+				subset = append(subset[:i], subset[i+1:]...)
+				break restart
+			}
+		}
+	}
+	return subset
+}
+
+func CleanupRules(s Netlink, ruleDeleteArray []*AuditRuleData) error {
+	var delFailure bool
+	_, ruleArray, err := ListAllRules(s)
+	delFailure = false
+	if len(ruleDeleteArray) != 0 {
+		for _, r := range ruleArray {
+			if isAuditRulePresent(r, ruleDeleteArray) == true {
+				err = auditDeleteRuleData(s, r, r.Flags, r.Action)
+				if err != nil {
+					delFailure = true
+				}
+			}
+		}
+	}
+	if delFailure == true {
+		return errors.Wrap(err, "Some of the Audit Cleanup Rules failed")
 	}
 	return nil
 }
@@ -137,7 +188,7 @@ func auditBit(nr int) uint32 {
 }
 
 // auditRuleSyscallData makes changes in the rule struct according to system call number
-func auditRuleSyscallData(rule *auditRuleData, scall int) error {
+func auditRuleSyscallData(rule *AuditRuleData, scall int) error {
 	word := auditWord(scall)
 	bit := auditBit(scall)
 
@@ -171,7 +222,7 @@ var (
 
 // auditRuleFieldPairData process the passed auditRuleData struct for passing to kernel
 // according to passed fieldnames and flags
-func auditRuleFieldPairData(rule *auditRuleData, fieldval interface{}, opval uint32, fieldname string, flags int) error {
+func auditRuleFieldPairData(rule *AuditRuleData, fieldval interface{}, opval uint32, fieldname string, flags int) error {
 
 	if rule.FieldCount >= (AUDIT_MAX_FIELDS - 1) {
 		return errors.Wrap(errMaxField, "auditRuleFieldPairData failed")
@@ -248,9 +299,13 @@ func auditRuleFieldPairData(rule *auditRuleData, fieldval interface{}, opval uin
 		}
 		if val, isInt := fieldval.(float64); isInt {
 			rule.Values[rule.FieldCount] = (uint32)(val)
-		} else if _, isString := fieldval.(string); isString {
+		} else if val, isString := fieldval.(string); isString {
 			// TODO: Add reverse mappings from msgType to audit constants (msg_typetab.h)
-			return errors.Wrap(errNoStr, "auditRuleFieldPairData failed")
+			if _, ok := MsgTypeTab[val]; ok {
+				rule.Values[rule.FieldCount] = (uint32)(MsgTypeTab[val])
+			} else {
+				return errors.Wrap(errNoStr, fmt.Sprintf("auditRuleFieldPairData failed %v", val))
+			}
 		} else {
 			return errors.Wrap(errUnset, fmt.Sprintf("auditRuleFieldPairData failed to set: %v", fieldval))
 		}
@@ -431,7 +486,7 @@ func setActionAndFilters(actions []interface{}) (int, int) {
 }
 
 //auditAddRuleData sends the prepared auditRuleData struct via the netlink connection to kernel
-func auditAddRuleData(s Netlink, rule *auditRuleData, flags int, action int) error {
+func auditAddRuleData(s Netlink, rule *AuditRuleData, flags int, action int) error {
 
 	if flags == AUDIT_FILTER_ENTRY {
 		return errors.Wrap(errEntryDep, "auditAddRuleData failed")
@@ -519,7 +574,8 @@ It expects the config in a json formatted string of following format:
 	]
 }
 */
-func SetRules(s Netlink, content []byte) error {
+func SetRules(s Netlink, content []byte) ([]*AuditRuleData, error) {
+	var ruleArray []*AuditRuleData
 	var (
 		rules      interface{}
 		err        error
@@ -527,13 +583,13 @@ func SetRules(s Netlink, content []byte) error {
 	)
 	err = json.Unmarshal(content, &rules)
 	if err != nil {
-		return errors.Wrap(err, "SetRules failed")
+		return nil, errors.Wrap(err, "SetRules failed")
 	}
 
 	m := rules.(map[string]interface{})
 
 	if err != nil {
-		return errors.Wrap(err, "SetRules failed")
+		return nil, errors.Wrap(err, "SetRules failed")
 	}
 	if strict, ok := m["strict_path_check"]; ok && strict.(bool) {
 		strictPath = true
@@ -549,9 +605,9 @@ func SetRules(s Netlink, content []byte) error {
 				rule := vi[ruleNo].(map[string]interface{})
 				path, ok := rule["path"]
 				if path == "" || !ok {
-					return errors.Wrap(err, "SetRules failed: watch option needs a path")
+					return nil, errors.Wrap(err, "SetRules failed: watch option needs a path")
 				}
-				var ruleData auditRuleData
+				var ruleData AuditRuleData
 				ruleData.Buf = make([]byte, 0)
 				add := AUDIT_FILTER_EXIT
 				action := AUDIT_ALWAYS
@@ -559,13 +615,13 @@ func SetRules(s Netlink, content []byte) error {
 
 				err = auditSetupAndAddWatchDir(&ruleData, path.(string), strictPath)
 				if err != nil {
-					return errors.Wrap(err, "SetRules failed")
+					return nil, errors.Wrap(err, "SetRules failed")
 				}
 				perms, ok := rule["permission"]
 				if ok {
 					err = auditSetupAndUpdatePerms(&ruleData, perms.(string))
 					if err != nil {
-						return errors.Wrap(err, "SetRules failed")
+						return nil, errors.Wrap(err, "SetRules failed")
 					}
 				}
 
@@ -573,15 +629,15 @@ func SetRules(s Netlink, content []byte) error {
 				if ok {
 					err = auditRuleFieldPairData(&ruleData, key, AUDIT_EQUAL, "key", AUDIT_FILTER_UNSET) // &AUDIT_BIT_MASK
 					if err != nil {
-						return errors.Wrap(err, "SetRules failed")
+						return nil, errors.Wrap(err, "SetRules failed")
 					}
 				}
 
 				err = auditAddRuleData(s, &ruleData, add, action)
 				if err != nil {
-					return errors.Wrap(err, "SetRules failed")
+					return nil, errors.Wrap(err, "SetRules failed")
 				}
-
+				ruleArray = append(ruleArray, &ruleData)
 			}
 
 		case "syscall_rules":
@@ -589,7 +645,7 @@ func SetRules(s Netlink, content []byte) error {
 			for sruleNo := range vi {
 				srule := vi[sruleNo].(map[string]interface{})
 				var (
-					ruleData         auditRuleData
+					ruleData         AuditRuleData
 					syscallsNotFound string
 				)
 				ruleData.Buf = make([]byte, 0)
@@ -599,14 +655,14 @@ func SetRules(s Netlink, content []byte) error {
 					for _, syscall := range syscalls {
 						syscall, ok := syscall.(string)
 						if !ok {
-							return fmt.Errorf("SetRules failed: unexpected syscall name %v", syscall)
+							return nil, fmt.Errorf("SetRules failed: unexpected syscall name %v", syscall)
 						}
 						if ival, ok := syscallMap[syscall]; ok {
 							err = auditRuleSyscallData(&ruleData, ival)
 							if err == nil {
 								auditSyscallAdded = true
 							} else {
-								return errors.Wrap(err, "SetRules failed")
+								return nil, errors.Wrap(err, "SetRules failed")
 							}
 						} else {
 							syscallsNotFound += " " + syscall
@@ -614,7 +670,7 @@ func SetRules(s Netlink, content []byte) error {
 					}
 				}
 				if auditSyscallAdded != true {
-					return fmt.Errorf("SetRules failed: one or more syscalls not found: %v", syscallsNotFound)
+					return nil, fmt.Errorf("SetRules failed: one or more syscalls not found: %v", syscallsNotFound)
 				}
 
 				// Process action
@@ -652,7 +708,7 @@ func SetRules(s Netlink, content []byte) error {
 						//Take appropriate action according to filters provided
 						err = auditRuleFieldPairData(&ruleData, fieldval, opval, fieldname.(string), filter) // &AUDIT_BIT_MASK
 						if err != nil {
-							return errors.Wrap(err, "SetRules failed")
+							return nil, errors.Wrap(err, "SetRules failed")
 						}
 					}
 				}
@@ -661,22 +717,23 @@ func SetRules(s Netlink, content []byte) error {
 				if ok {
 					err = auditRuleFieldPairData(&ruleData, key, AUDIT_EQUAL, "key", AUDIT_FILTER_UNSET) // &AUDIT_BIT_MASK
 					if err != nil {
-						return errors.Wrap(err, "SetRules failed")
+						return nil, errors.Wrap(err, "SetRules failed")
 					}
 				}
 
 				if filter != AUDIT_FILTER_UNSET {
 					err = auditAddRuleData(s, &ruleData, filter, action)
 					if err != nil {
-						return errors.Wrap(err, "SetRules failed")
+						return nil, errors.Wrap(err, "SetRules failed")
 					}
+					ruleArray = append(ruleArray, &ruleData)
 				} else {
-					return fmt.Errorf("SetRules failed: filters not set or invalid: %v , %v ", actions[0].(string), actions[1].(string))
+					return nil, fmt.Errorf("SetRules failed: filters not set or invalid: %v , %v ", actions[0].(string), actions[1].(string))
 				}
 			}
 		}
 	}
-	return nil
+	return ruleArray, nil
 }
 
 var errPathTooBig = errors.New("the path passed for the watch is too big")
@@ -709,7 +766,7 @@ func checkPath(pathName string) error {
 }
 
 // auditSetupAndAddWatchDir checks directory watch params for setting of fields in auditRuleData
-func auditSetupAndAddWatchDir(rule *auditRuleData, pathName string, strictPath bool) error {
+func auditSetupAndAddWatchDir(rule *AuditRuleData, pathName string, strictPath bool) error {
 	typeName := uint16(AUDIT_WATCH)
 
 	err := checkPath(pathName)
@@ -741,7 +798,7 @@ func auditSetupAndAddWatchDir(rule *auditRuleData, pathName string, strictPath b
 }
 
 // auditAddWatchDir sets fields in auditRuleData for watching PathName
-func auditAddWatchDir(typeName uint16, rule *auditRuleData, pathName string) error {
+func auditAddWatchDir(typeName uint16, rule *AuditRuleData, pathName string) error {
 
 	// Check if Rule is Empty
 	if rule.FieldCount != 0 {
@@ -781,7 +838,7 @@ func auditAddWatchDir(typeName uint16, rule *auditRuleData, pathName string) err
 
 // auditSetupAndUpdatePerms validates permission string and passes their
 // integer equivalents to set auditRuleData
-func auditSetupAndUpdatePerms(rule *auditRuleData, perms string) error {
+func auditSetupAndUpdatePerms(rule *AuditRuleData, perms string) error {
 	if len(perms) > 4 {
 		return fmt.Errorf("auditSetupAndUpdatePerms failed: invalid permission string %v", perms)
 	}
@@ -810,7 +867,7 @@ func auditSetupAndUpdatePerms(rule *auditRuleData, perms string) error {
 }
 
 // auditUpdateWatchPerms sets permisission bits in auditRuleData
-func auditUpdateWatchPerms(rule *auditRuleData, perms int) error {
+func auditUpdateWatchPerms(rule *AuditRuleData, perms int) error {
 	var done bool
 
 	if rule.FieldCount < 1 {
@@ -843,30 +900,30 @@ func auditUpdateWatchPerms(rule *auditRuleData, perms int) error {
 // ListAllRules lists all audit rules currently loaded in audit kernel.
 // It displays them in the standard auditd format as done by auditctl utility.
 // It also returns a list of strings that contain the audit rules (in auditctl format)
-func ListAllRules(s Netlink) ([]string, error) {
-	var ruleArray []*auditRuleData
+func ListAllRules(s Netlink) ([]string, []*AuditRuleData, error) {
+	var ruleArray []*AuditRuleData
 	var result []string
 	wb := newNetlinkAuditRequest(uint16(AUDIT_LIST_RULES), syscall.AF_NETLINK, 0)
 	if err := s.Send(wb); err != nil {
-		return nil, errors.Wrap(err, "ListAllRules failed")
+		return nil, nil, errors.Wrap(err, "ListAllRules failed")
 	}
 done:
 	for {
 		msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "ListAllRules failed")
+			return nil, nil, errors.Wrap(err, "ListAllRules failed")
 		}
 
 		for _, m := range msgs {
 			socketPID, err := s.GetPID()
 			if err != nil {
-				return nil, errors.Wrap(err, "ListAllRules: GetPID failed")
+				return nil, nil, errors.Wrap(err, "ListAllRules: GetPID failed")
 			}
 			if m.Header.Seq != wb.Header.Seq {
-				return nil, fmt.Errorf("ListAllRules: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
+				return nil, nil, fmt.Errorf("ListAllRules: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
 			}
 			if int(m.Header.Pid) != socketPID {
-				return nil, fmt.Errorf("ListAllRules: Wrong pid %d, expected %d", m.Header.Pid, socketPID)
+				return nil, nil, fmt.Errorf("ListAllRules: Wrong pid %d, expected %d", m.Header.Pid, socketPID)
 			}
 			if m.Header.Type == syscall.NLMSG_DONE {
 				var out string
@@ -881,21 +938,21 @@ done:
 			if m.Header.Type == syscall.NLMSG_ERROR {
 				e := int32(nativeEndian().Uint32(m.Data[0:4]))
 				if e != 0 {
-					return nil, fmt.Errorf("ListAllRules: error while receiving rules")
+					return nil, nil, fmt.Errorf("ListAllRules: error while receiving rules")
 				}
 			}
 			if m.Header.Type == uint16(AUDIT_LIST_RULES) {
-				var r auditRuleData
+				var r AuditRuleData
 				nbuf := bytes.NewBuffer(m.Data)
 				err = struc.Unpack(nbuf, &r)
 				if err != nil {
-					return nil, errors.Wrap(err, "ListAllRules failed")
+					return nil, nil, errors.Wrap(err, "ListAllRules failed")
 				}
 				ruleArray = append(ruleArray, &r)
 			}
 		}
 	}
-	return result, nil
+	return result, ruleArray, nil
 }
 
 //AuditSyscallToName takes syscall number and returns the syscall name. Currently only applicable for x64 arch.
@@ -910,7 +967,7 @@ func AuditSyscallToName(syscall string) (name string, err error) {
 
 // printRule returns a string describing rule defined by the passed rule struct
 // the string is in the same format as printed by auditctl utility
-func printRule(rule *auditRuleData) string {
+func printRule(rule *AuditRuleData) string {
 	var (
 		watch        = isWatch(rule)
 		result, n    string
@@ -1054,7 +1111,7 @@ func printRule(rule *auditRuleData) string {
 
 //isWatch checks if the auditRuleData is a watch rule.
 //returns true when syscall == all and a perm field is detected in auditRuleData
-func isWatch(rule *auditRuleData) bool {
+func isWatch(rule *AuditRuleData) bool {
 	var (
 		perm bool
 		all  = true
@@ -1106,7 +1163,7 @@ func operatorToSymbol(op uint32) string {
 
 //printSyscallRule returns the syscall loaded in the auditRuleData struct
 //auditd counterpart -> print_syscall in auditctl-listing.c
-func printSyscallRule(rule *auditRuleData) (string, int, int, bool) {
+func printSyscallRule(rule *AuditRuleData) (string, int, int, bool) {
 	//TODO: support syscall for all archs
 	var (
 		name    string
@@ -1228,7 +1285,7 @@ func printFieldCmp(value, op uint32) string {
 //keyMatch indicates whether or not rule should be printed or not
 //it is to be used for filtering the list of rules by a particular key
 //currently unused but filtering capability can be added later
-func keyMatch(rule *auditRuleData, key string) bool {
+func keyMatch(rule *AuditRuleData, key string) bool {
 	var (
 		bufferOffset int
 	)

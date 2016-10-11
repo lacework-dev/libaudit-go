@@ -185,6 +185,9 @@ func ParseAuditNetlinkMessage(b []byte) ([]NetlinkMessage, error) {
 	for len(b) >= syscall.NLMSG_HDRLEN {
 		h, dbuf, dlen, err := netlinkMessageHeaderAndData(b)
 		if err != nil {
+			if len(msgs) > 0 {
+				break
+			}
 			return nil, errors.Wrap(err, "error while parsing NetlinkMessage")
 		}
 		if len(dbuf) == int(h.Len) || dlen == int(h.Len) {
