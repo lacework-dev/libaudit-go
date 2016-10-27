@@ -16,8 +16,9 @@ const (
 	AUDIT_FILTER_EXIT  = 0x04 /* Apply rule at syscall exit */
 	AUDIT_FILTER_TYPE  = 0x05 /* Apply rule at audit_log_start */
 	/* These are used in filter control */
-	AUDIT_FILTER_MASK  = 0x07 /* Mask to get actual filter */
-	AUDIT_FILTER_UNSET = 0x80 /* This value means filter is unset */
+	AUDIT_FILTER_MASK    = 0x07 /* Mask to get actual filter */
+	AUDIT_FILTER_PREPEND = 0x10 /* Mask to prepend actual filter */
+	AUDIT_FILTER_UNSET   = 0x80 /* This value means filter is unset */
 
 	/* Rule actions */
 	AUDIT_NEVER    = 0 /* Do not build context if rule matches */

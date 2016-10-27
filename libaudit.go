@@ -138,6 +138,7 @@ type Netlink interface {
 	// GetPID returns the PID of the program the socket is being used to talk to
 	// in our case we talk to the kernel so it is set to 0
 	GetPID() (int, error)
+	SetsockRecvTO(recvto int64) error
 }
 
 // NetlinkConnection holds the file descriptor and address for
@@ -290,6 +291,12 @@ func (s *NetlinkConnection) GetPID() (int, error) {
 	}
 	v := address.(*syscall.SockaddrNetlink)
 	return int(v.Pid), nil
+}
+
+func (s *NetlinkConnection) SetsockRecvTO(recvto int64) error {
+	var tv syscall.Timeval
+	tv = syscall.Timeval{recvto / 1000, (recvto % 1000) * 1000}
+	return syscall.SetsockoptTimeval(s.fd, 1 /*SOL_SOCKET*/, 20 /*SO_RECVTIMEO*/, &tv)
 }
 
 // auditGetReply connects to kernel to recieve a reply

@@ -721,6 +721,11 @@ func SetRules(s Netlink, content []byte) ([]*AuditRuleData, error) {
 					}
 				}
 
+				_, ok = srule["prepend"]
+				if ok {
+					ruleData.Flags |= AUDIT_FILTER_PREPEND
+				}
+
 				if filter != AUDIT_FILTER_UNSET {
 					err = auditAddRuleData(s, &ruleData, filter, action)
 					if err != nil {
@@ -932,7 +937,7 @@ done:
 					result = append(result, printed)
 					out += (printed + "\n")
 				}
-				fmt.Print(out)
+				//fmt.Print(out)
 				break done
 			}
 			if m.Header.Type == syscall.NLMSG_ERROR {

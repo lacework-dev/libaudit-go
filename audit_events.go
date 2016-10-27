@@ -57,16 +57,18 @@ func GetAuditEvents(s Netlink, cb EventCallback, args ...interface{}) {
 		for {
 			select {
 			default:
-				msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
-				for _, msg := range msgs {
-					if msg.Header.Type == syscall.NLMSG_ERROR {
-						err := int32(nativeEndian().Uint32(msg.Data[0:4]))
-						if err != 0 {
-							cb(nil, fmt.Errorf("error receiving events %d", err), args...)
+				msgs, err := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
+				if err == nil {
+					for _, msg := range msgs {
+						if msg.Header.Type == syscall.NLMSG_ERROR {
+							err := int32(nativeEndian().Uint32(msg.Data[0:4]))
+							if err != 0 {
+								cb(nil, fmt.Errorf("error receiving events %d", err), args...)
+							}
+						} else {
+							nae, err := NewAuditEvent(msg)
+							cb(nae, err, args...)
 						}
-					} else {
-						nae, err := NewAuditEvent(msg)
-						cb(nae, err, args...)
 					}
 				}
 			}
@@ -85,26 +87,28 @@ func GetRawAuditEvents(s Netlink, cb RawEventCallback, args ...interface{}) {
 		for {
 			select {
 			default:
-				msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
-				for _, msg := range msgs {
-					var (
-						m   string
-						err error
-					)
-					if msg.Header.Type == syscall.NLMSG_ERROR {
-						v := int32(nativeEndian().Uint32(msg.Data[0:4]))
-						if v != 0 {
-							cb(m, fmt.Errorf("error receiving events %d", v), args...)
-						}
-					} else {
-						Type := auditConstant(msg.Header.Type)
-						if Type.String() == "auditConstant("+strconv.Itoa(int(msg.Header.Type))+")" {
-							err = errors.New("Unknown Type: " + string(msg.Header.Type))
+				msgs, err := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
+				if err == nil {
+					for _, msg := range msgs {
+						var (
+							m   string
+							err error
+						)
+						if msg.Header.Type == syscall.NLMSG_ERROR {
+							v := int32(nativeEndian().Uint32(msg.Data[0:4]))
+							if v != 0 {
+								cb(m, fmt.Errorf("error receiving events %d", v), args...)
+							}
 						} else {
-							m = "type=" + Type.String()[6:] + " msg=" + string(msg.Data[:]) + "\n"
+							Type := auditConstant(msg.Header.Type)
+							if Type.String() == "auditConstant("+strconv.Itoa(int(msg.Header.Type))+")" {
+								err = errors.New("Unknown Type: " + string(msg.Header.Type))
+							} else {
+								m = "type=" + Type.String()[6:] + " msg=" + string(msg.Data[:]) + "\n"
+							}
 						}
+						cb(m, err, args...)
 					}
-					cb(m, err, args...)
 				}
 			}
 		}
@@ -121,19 +125,24 @@ func GetRawAuditMessages(s Netlink, cb RawEventTypeCallback, done *chan bool, ar
 	for {
 		select {
 		case <-*done:
+			//fmt.Printf("Loop Done %v\n", info)
 			return
 		default:
-			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
-			for _, msg := range msgs {
-				if msg.Header.Type == syscall.NLMSG_ERROR {
-					v := int32(nativeEndian().Uint32(msg.Data[0:4]))
-					if v != 0 {
-						cb(msg.Header.Type, string(msg.Data[:]), fmt.Errorf("error receiving events %d", v), args...)
+			//fmt.Printf("Loop Receive\n")
+			msgs, err := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
+			if err == nil {
+				for _, msg := range msgs {
+					if msg.Header.Type == syscall.NLMSG_ERROR {
+						v := int32(nativeEndian().Uint32(msg.Data[0:4]))
+						if v != 0 {
+							cb(msg.Header.Type, string(msg.Data[:]), fmt.Errorf("error receiving events %d", v), args...)
+						}
+					} else {
+						cb(msg.Header.Type, string(msg.Data[:]), nil, args...)
 					}
-				} else {
-					cb(msg.Header.Type, string(msg.Data[:]), nil, args...)
 				}
 			}
+			//fmt.Printf("Loop Done Receive\n")
 		}
 	}
 }
@@ -151,16 +160,18 @@ func GetAuditMessages(s Netlink, cb EventCallback, done *chan bool, args ...inte
 		case <-*done:
 			return
 		default:
-			msgs, _ := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
-			for _, msg := range msgs {
-				if msg.Header.Type == syscall.NLMSG_ERROR {
-					v := int32(nativeEndian().Uint32(msg.Data[0:4]))
-					if v != 0 {
-						cb(nil, fmt.Errorf("error receiving events %d", v), args...)
+			msgs, err := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, rb)
+			if err == nil {
+				for _, msg := range msgs {
+					if msg.Header.Type == syscall.NLMSG_ERROR {
+						v := int32(nativeEndian().Uint32(msg.Data[0:4]))
+						if v != 0 {
+							cb(nil, fmt.Errorf("error receiving events %d", v), args...)
+						}
+					} else {
+						nae, err := NewAuditEvent(msg)
+						cb(nae, err, args...)
 					}
-				} else {
-					nae, err := NewAuditEvent(msg)
-					cb(nae, err, args...)
 				}
 			}
 		}
