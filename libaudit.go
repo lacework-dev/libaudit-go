@@ -147,6 +147,7 @@ type Netlink interface {
 type NetlinkConnection struct {
 	fd      int
 	address syscall.SockaddrNetlink
+	rb      []byte
 }
 
 func nativeEndian() binary.ByteOrder {
@@ -250,6 +251,8 @@ func NewNetlinkConnection() (*NetlinkConnection, error) {
 		syscall.Close(fd)
 		return nil, errors.Wrap(err, "could not bind socket to address")
 	}
+	s.rb = make([]byte, syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH)
+
 	return s, nil
 }
 
@@ -269,7 +272,8 @@ func (s *NetlinkConnection) Send(request *NetlinkMessage) error {
 // Receive is a wrapper for recieving from netlink socket and return an array of NetlinkMessage
 func (s *NetlinkConnection) Receive(bytesize int, block int, rb []byte) ([]NetlinkMessage, error) {
 	if rb == nil {
-		rb = make([]byte, bytesize)
+		rb = s.rb
+		//rb = make([]byte, bytesize)
 	}
 	nr, _, err := syscall.Recvfrom(s.fd, rb, 0|block)
 
