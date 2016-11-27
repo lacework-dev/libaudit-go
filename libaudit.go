@@ -135,6 +135,7 @@ type Netlink interface {
 	// Receive requires bytesize which specify the buffer size for incoming message and block which specify the mode for
 	// reception (blocking and nonblocking)
 	Receive(bytesize int, block int, rb []byte) ([]NetlinkMessage, error)
+	ReceiveNoParse(bytesize int, block int, rb []byte) ([]byte, error)
 	// GetPID returns the PID of the program the socket is being used to talk to
 	// in our case we talk to the kernel so it is set to 0
 	GetPID() (int, error)
@@ -161,8 +162,10 @@ func nativeEndian() binary.ByteOrder {
 // ToWireFormat converts a NetlinkMessage to byte stream.
 // Recvfrom in go takes only a byte [] to put the data recieved from the kernel that removes the need
 // for having a separate audit_reply struct for recieving data from kernel.
-func (rr *NetlinkMessage) ToWireFormat() []byte {
-	b := make([]byte, rr.Header.Len)
+func (rr *NetlinkMessage) ToWireFormat(b []byte) []byte {
+	if b == nil {
+		b = make([]byte, rr.Header.Len)
+	}
 	*(*uint32)(unsafe.Pointer(&b[0:4][0])) = rr.Header.Len
 	*(*uint16)(unsafe.Pointer(&b[4:6][0])) = rr.Header.Type
 	*(*uint16)(unsafe.Pointer(&b[6:8][0])) = rr.Header.Flags
@@ -259,11 +262,12 @@ func NewNetlinkConnection() (*NetlinkConnection, error) {
 // Close is a wrapper for closing netlink socket
 func (s *NetlinkConnection) Close() {
 	syscall.Close(s.fd)
+	s.rb = nil
 }
 
 // Send is a wrapper for sending NetlinkMessage across netlink socket
 func (s *NetlinkConnection) Send(request *NetlinkMessage) error {
-	if err := syscall.Sendto(s.fd, request.ToWireFormat(), 0, &s.address); err != nil {
+	if err := syscall.Sendto(s.fd, request.ToWireFormat(s.rb), 0, &s.address); err != nil {
 		return errors.Wrap(err, "could not send NetlinkMessage")
 	}
 	return nil
@@ -285,6 +289,24 @@ func (s *NetlinkConnection) Receive(bytesize int, block int, rb []byte) ([]Netli
 	}
 	rb = rb[:nr]
 	return ParseAuditNetlinkMessage(rb)
+}
+
+// Receive is a wrapper for recieving from netlink socket and return an array of NetlinkMessage
+func (s *NetlinkConnection) ReceiveNoParse(bytesize int, block int, rb []byte) ([]byte, error) {
+	if rb == nil {
+		rb = s.rb
+		//rb = make([]byte, bytesize)
+	}
+	nr, _, err := syscall.Recvfrom(s.fd, rb, 0|block)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "recvfrom failed")
+	}
+	if nr < syscall.NLMSG_HDRLEN {
+		return nil, errors.Wrap(err, "message length shorter than expected")
+	}
+	rb = rb[:nr]
+	return rb, nil
 }
 
 // GetPID returns the PID of the program socket is configured to talk to

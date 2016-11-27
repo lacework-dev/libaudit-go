@@ -129,8 +129,41 @@ func GetRawAuditMessages(s Netlink, cb RawEventTypeCallback, done *chan bool, ar
 			return
 		default:
 			//fmt.Printf("Loop Receive\n")
-			msgs, err := s.Receive(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
+			b, err := s.ReceiveNoParse(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 			if err == nil {
+				for len(b) >= syscall.NLMSG_HDRLEN {
+					h, dbuf, dlen, err := netlinkMessageHeaderAndData(b)
+					if err != nil {
+						break
+					}
+					if len(dbuf) == int(h.Len) || dlen == int(h.Len) {
+						// this should never be possible in correct scenarios
+						// but sometimes kernel reponse have length of header == length of data appended
+						// which would lead to trimming of data if we subtract NLMSG_HDRLEN
+						// therefore following workaround
+						//m = NetlinkMessage{Header: *h, Data: dbuf[:int(h.Len)]}
+						if h.Type == syscall.NLMSG_ERROR {
+							v := int32(nativeEndian().Uint32(dbuf[0:4]))
+							if v != 0 {
+								cb(h.Type, string(dbuf[:h.Len]), fmt.Errorf("error receiving events %d", v), args...)
+							}
+						} else {
+							cb(h.Type, string(dbuf[:int(h.Len)]), nil, args...)
+						}
+					} else {
+						//m = NetlinkMessage{Header: *h, Data: dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]}
+						if h.Type == syscall.NLMSG_ERROR {
+							v := int32(nativeEndian().Uint32(dbuf[0:4]))
+							if v != 0 {
+								cb(h.Type, string(dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]), fmt.Errorf("error receiving events %d", v), args...)
+							}
+						} else {
+							cb(h.Type, string(dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]), nil, args...)
+						}
+					}
+					b = b[dlen:]
+				}
+				/**
 				for _, msg := range msgs {
 					if msg.Header.Type == syscall.NLMSG_ERROR {
 						v := int32(nativeEndian().Uint32(msg.Data[0:4]))
@@ -141,6 +174,7 @@ func GetRawAuditMessages(s Netlink, cb RawEventTypeCallback, done *chan bool, ar
 						cb(msg.Header.Type, string(msg.Data[:]), nil, args...)
 					}
 				}
+				**/
 			}
 			//fmt.Printf("Loop Done Receive\n")
 		}

@@ -18,8 +18,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var rulesRetrieved AuditRuleData
-
 // auditRuleData stores rule information
 // replication of c struct audit_rule_data
 type AuditRuleData struct {

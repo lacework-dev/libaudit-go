@@ -22,7 +22,7 @@ func TestWireFormat(t *testing.T) {
 	binary.LittleEndian.PutUint32(data, 12)
 	rr.Data = append(rr.Data[:], data[:]...)
 	var result = []byte{20, 0, 0, 0, 16, 0, 5, 0, 2, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0}
-	var expected = rr.ToWireFormat()
+	var expected = rr.ToWireFormat(nil)
 	if !reflect.DeepEqual(result, expected) {
 		t.Errorf("ToWireFormat(): expected %v, found %v", result, expected)
 	}
