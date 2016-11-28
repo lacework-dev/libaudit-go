@@ -327,17 +327,50 @@ func (s *NetlinkConnection) SetsockRecvTO(recvto int64) error {
 
 // auditGetReply connects to kernel to recieve a reply
 func auditGetReply(s Netlink, bytesize, block int, seq uint32) error {
+	socketPID, err := s.GetPID()
+	if err != nil {
+		return errors.Wrap(err, "auditGetReply: GetPID failed")
+	}
 done:
 	for {
+		b, err := s.ReceiveNoParse(bytesize, block, nil)
+		if err != nil {
+			return errors.Wrap(err, "auditGetReply failed")
+		}
+		for len(b) >= syscall.NLMSG_HDRLEN {
+			h, dbuf, dlen, err := netlinkMessageHeaderAndData(b)
+			if err != nil {
+				return errors.Wrap(err, "auditGetReply msg parsing failed")
+			}
+			if h.Seq != seq {
+				return fmt.Errorf("auditGetReply: Wrong Seq nr %d, expected %d", h.Seq, seq)
+			}
+			if int(h.Pid) != socketPID {
+				return fmt.Errorf("auditGetReply: Wrong pid %d, expected %d", h.Pid, socketPID)
+			}
+			if h.Type == syscall.NLMSG_DONE {
+				break done
+			}
+			if h.Type == syscall.NLMSG_ERROR {
+				e := int32(nativeEndian().Uint32(dbuf[0:4]))
+				if e == 0 {
+					break done
+				} else {
+					return fmt.Errorf("auditGetReply: error while recieving reply -%d", e)
+				}
+			}
+			// acknowledge AUDIT_GET replies from kernel
+			if h.Type == uint16(AUDIT_GET) {
+				break done
+			}
+			b = b[dlen:]
+		}
+		/**
 		msgs, err := s.Receive(bytesize, block, nil) //ParseAuditNetlinkMessage(rb)
 		if err != nil {
 			return errors.Wrap(err, "auditGetReply failed")
 		}
 		for _, m := range msgs {
-			socketPID, err := s.GetPID()
-			if err != nil {
-				return errors.Wrap(err, "auditGetReply: GetPID failed")
-			}
 			if m.Header.Seq != seq {
 				return fmt.Errorf("auditGetReply: Wrong Seq nr %d, expected %d", m.Header.Seq, seq)
 			}
@@ -360,6 +393,7 @@ done:
 				break done
 			}
 		}
+		**/
 	}
 	return nil
 }

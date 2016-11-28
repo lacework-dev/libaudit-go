@@ -126,6 +126,10 @@ func DeleteAllRules(s Netlink) error {
 		return errors.Wrap(err, "DeleteAllRules failed")
 	}
 
+	socketPID, err := s.GetPID()
+	if err != nil {
+		return errors.Wrap(err, "DeleteAllRules: GetPID failed")
+	}
 done:
 	for {
 		// Avoid DONTWAIT due to implications on systems with low resources
@@ -136,10 +140,6 @@ done:
 		}
 
 		for _, m := range msgs {
-			socketPID, err := s.GetPID()
-			if err != nil {
-				return errors.Wrap(err, "DeleteAllRules: GetPID failed")
-			}
 			if m.Header.Seq != uint32(wb.Header.Seq) {
 				return fmt.Errorf("DeleteAllRules: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
 			}
@@ -910,6 +910,10 @@ func ListAllRules(s Netlink) ([]string, []*AuditRuleData, error) {
 	if err := s.Send(wb); err != nil {
 		return nil, nil, errors.Wrap(err, "ListAllRules failed")
 	}
+	socketPID, err := s.GetPID()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "ListAllRules: GetPID failed")
+	}
 done:
 	for {
 		msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
@@ -918,10 +922,6 @@ done:
 		}
 
 		for _, m := range msgs {
-			socketPID, err := s.GetPID()
-			if err != nil {
-				return nil, nil, errors.Wrap(err, "ListAllRules: GetPID failed")
-			}
 			if m.Header.Seq != wb.Header.Seq {
 				return nil, nil, fmt.Errorf("ListAllRules: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
 			}
