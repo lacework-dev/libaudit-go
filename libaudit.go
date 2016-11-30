@@ -444,6 +444,59 @@ func AuditIsEnabled(s Netlink) (state int, pid int, err error) {
 
 done:
 	for {
+		b, err := s.ReceiveNoParse(MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
+		if err != nil {
+			return -1, -1, errors.Wrap(err, "AuditIsEnabled failed")
+		}
+
+		for len(b) >= syscall.NLMSG_HDRLEN {
+			h := (*syscall.NlMsghdr)(unsafe.Pointer(&b[0]))
+			if int(h.Len) < syscall.NLMSG_HDRLEN || int(h.Len) > len(b) {
+				return -1, -1, fmt.Errorf("Nlmsghdr header length unexpected %v, actual packet length %v", h.Len, len(b))
+			}
+			dbuf := b[syscall.NLMSG_HDRLEN:]
+			dlen := nlmAlignOf(int(h.Len))
+
+			if len(dbuf) == int(h.Len) || dlen == int(h.Len) {
+				// this should never be possible in correct scenarios
+				// but sometimes kernel reponse have length of header == length of data appended
+				// which would lead to trimming of data if we subtract NLMSG_HDRLEN
+				// therefore following workaround
+				//m = NetlinkMessage{Header: *h, Data: dbuf[:int(h.Len)]}
+				dbuf = dbuf[:int(h.Len)]
+			} else {
+				//m = NetlinkMessage{Header: *h, Data: dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]}
+				dbuf = dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]
+			}
+
+			if h.Seq != uint32(wb.Header.Seq) {
+				return -1, -1, fmt.Errorf("AuditIsEnabled: Wrong Seq nr %d, expected %d", h.Seq, wb.Header.Seq)
+			}
+			if h.Type == syscall.NLMSG_DONE {
+				break done
+			} else if h.Type == syscall.NLMSG_ERROR {
+				e := int32(nativeEndian().Uint32(dbuf[0:4]))
+				if e == 0 {
+					// request ack from kernel
+					b = b[dlen:]
+					continue
+				}
+				break done
+			}
+			if h.Type == uint16(AUDIT_GET) {
+				//Convert the data part written to auditStatus struct
+				buf := bytes.NewBuffer(dbuf[:])
+				err = binary.Read(buf, nativeEndian(), &status)
+				if err != nil {
+					return -1, -1, errors.Wrap(err, "AuditIsEnabled: binary read into auditStatus failed")
+				}
+				state = int(status.Enabled)
+				pid = int(status.Pid)
+				return state, pid, nil
+			}
+			b = b[dlen:]
+		}
+		/**
 		// MSG_DONTWAIT has implications on systems with low memory and CPU
 		// msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, syscall.MSG_DONTWAIT)
 		msgs, err := s.Receive(MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
@@ -487,6 +540,7 @@ done:
 				return state, pid, nil
 			}
 		}
+		**/
 	}
 	return -1, -1, nil
 }
