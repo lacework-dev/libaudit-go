@@ -151,6 +151,10 @@ type NetlinkConnection struct {
 	rb      []byte
 }
 
+func NativeEndian() binary.ByteOrder {
+	return nativeEndian()
+}
+
 func nativeEndian() binary.ByteOrder {
 	var x uint32 = 0x01020304
 	if *(*byte)(unsafe.Pointer(&x)) == 0x01 {

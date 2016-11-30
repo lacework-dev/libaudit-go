@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"syscall"
+	"unsafe"
 
 	"github.com/pkg/errors"
 )
@@ -132,33 +133,39 @@ func GetRawAuditMessages(s Netlink, cb RawEventTypeCallback, done *chan bool, ar
 			b, err := s.ReceiveNoParse(syscall.NLMSG_HDRLEN+MAX_AUDIT_MESSAGE_LENGTH, 0, nil)
 			if err == nil {
 				for len(b) >= syscall.NLMSG_HDRLEN {
-					h, dbuf, dlen, err := netlinkMessageHeaderAndData(b)
+					h := (*syscall.NlMsghdr)(unsafe.Pointer(&b[0]))
+					if int(h.Len) < syscall.NLMSG_HDRLEN || int(h.Len) > len(b) {
+						break
+					}
+					b = b[syscall.NLMSG_HDRLEN:]
+					dlen := nlmAlignOf(int(h.Len)) - syscall.NLMSG_HDRLEN
+
 					if err != nil {
 						break
 					}
-					if len(dbuf) == int(h.Len) || dlen == int(h.Len) {
+					if len(b) == int(h.Len) || dlen == int(h.Len) {
 						// this should never be possible in correct scenarios
 						// but sometimes kernel reponse have length of header == length of data appended
 						// which would lead to trimming of data if we subtract NLMSG_HDRLEN
 						// therefore following workaround
 						//m = NetlinkMessage{Header: *h, Data: dbuf[:int(h.Len)]}
 						if h.Type == syscall.NLMSG_ERROR {
-							v := int32(nativeEndian().Uint32(dbuf[0:4]))
+							v := int32(nativeEndian().Uint32(b[0:4]))
 							if v != 0 {
-								cb(h.Type, string(dbuf[:h.Len]), fmt.Errorf("error receiving events %d", v), args...)
+								cb(h.Type, string(b[:h.Len]), fmt.Errorf("error receiving events %d", v), args...)
 							}
 						} else {
-							cb(h.Type, string(dbuf[:int(h.Len)]), nil, args...)
+							cb(h.Type, string(b[:int(h.Len)]), nil, args...)
 						}
 					} else {
 						//m = NetlinkMessage{Header: *h, Data: dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]}
 						if h.Type == syscall.NLMSG_ERROR {
-							v := int32(nativeEndian().Uint32(dbuf[0:4]))
+							v := int32(nativeEndian().Uint32(b[0:4]))
 							if v != 0 {
-								cb(h.Type, string(dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]), fmt.Errorf("error receiving events %d", v), args...)
+								cb(h.Type, string(b[:int(h.Len)-syscall.NLMSG_HDRLEN]), fmt.Errorf("error receiving events %d", v), args...)
 							}
 						} else {
-							cb(h.Type, string(dbuf[:int(h.Len)-syscall.NLMSG_HDRLEN]), nil, args...)
+							cb(h.Type, string(b[:int(h.Len)-syscall.NLMSG_HDRLEN]), nil, args...)
 						}
 					}
 					b = b[dlen:]
