@@ -593,7 +593,7 @@ func SetRules(s Netlink, content []byte) ([]*AuditRuleData, error) {
 		strictPath = true
 	}
 	//TODO: syscallMap should be loaded according to runtime arch
-	syscallMap := headers.SysMapX64
+	//syscallMap := headers.SysMapX64
 	for k, v := range m {
 		auditSyscallAdded = false
 		switch k {
@@ -655,7 +655,7 @@ func SetRules(s Netlink, content []byte) ([]*AuditRuleData, error) {
 						if !ok {
 							return nil, fmt.Errorf("SetRules failed: unexpected syscall name %v", syscall)
 						}
-						if ival, ok := syscallMap[syscall]; ok {
+						if ival := headers.SysMapX64(syscall); ival != -1 {
 							err = auditRuleSyscallData(&ruleData, ival)
 							if err == nil {
 								auditSyscallAdded = true
@@ -960,8 +960,8 @@ done:
 
 //AuditSyscallToName takes syscall number and returns the syscall name. Currently only applicable for x64 arch.
 func AuditSyscallToName(syscall string) (name string, err error) {
-	syscallMap := headers.ReverseSysMapX64
-	if val, ok := syscallMap[syscall]; ok {
+	//syscallMap := headers.ReverseSysMapX64
+	if val := headers.ReverseSysMapX64(syscall); val != "Unsupported" {
 		return val, nil
 	}
 	return "", fmt.Errorf("AuditSyscallToName failed: syscall %v not found", syscall)
