@@ -274,7 +274,7 @@ func printUID(fieldValue string) (string, error) {
 
 	name, err := user.LookupId(fieldValue)
 	if err != nil {
-		return fmt.Sprintf("unknown(%s)", fieldValue), nil
+		return "unknown(" + fieldValue + ")", nil
 	}
 	return name.Username, nil
 }
@@ -477,10 +477,10 @@ func printSockAddr(fieldValue string) (string, error) {
 	family := int(s.Sa_family)
 
 	if _, ok := headers.SocketFamLookup[int(family)]; !ok {
-		return fmt.Sprintf("unknown family (%d)", family), nil
+		return ("unknown family (" + strconv.FormatInt(int64(family), 10) + ")"), nil
 	}
 
-	errstring := fmt.Sprintf("%s (error resolving addr)", headers.SocketFamLookup[family])
+	errstring := headers.SocketFamLookup[family] + " (error resolving addr)"
 
 	switch family {
 
@@ -492,7 +492,7 @@ func printSockAddr(fieldValue string) (string, error) {
 		if err != nil {
 			return fieldValue, errors.Wrap(err, errstring)
 		}
-		name = fmt.Sprintf("%s %s", headers.SocketFamLookup[family], string(p.Sun_path[:]))
+		name = headers.SocketFamLookup[family] + " " + string(p.Sun_path[:])
 		return name, nil
 
 	case syscall.AF_INET:
@@ -505,7 +505,7 @@ func printSockAddr(fieldValue string) (string, error) {
 		}
 		addrBytes := ip4.In_addr[:]
 		var x net.IP = addrBytes
-		name = fmt.Sprintf("%s host:%s serv:%d", headers.SocketFamLookup[family], x.String(), ip4.Sin_port)
+		name = headers.SocketFamLookup[family] + " host:" + x.String() + " serv:" + strconv.FormatInt(int64(ip4.Sin_port), 10)
 		return name, nil
 
 	case syscall.AF_INET6:
@@ -517,7 +517,7 @@ func printSockAddr(fieldValue string) (string, error) {
 		}
 		addrBytes := ip6.Sin6_addr[:]
 		var x net.IP = addrBytes
-		name = fmt.Sprintf("%s host:%s serv:%d", headers.SocketFamLookup[family], x.String(), ip6.Sin6_port)
+		name = headers.SocketFamLookup[family] + " host:" + x.String() + " serv:" + strconv.FormatInt(int64(ip6.Sin6_port), 10)
 		return name, nil
 
 	case syscall.AF_NETLINK:
@@ -528,7 +528,7 @@ func printSockAddr(fieldValue string) (string, error) {
 		if err != nil {
 			return fieldValue, errors.Wrap(err, errstring)
 		}
-		name = fmt.Sprintf("%s pid:%d", headers.SocketFamLookup[family], n.Nl_pid)
+		name = headers.SocketFamLookup[family] + " pid:" + strconv.FormatInt(int64(n.Nl_pid), 10)
 		return name, nil
 
 	case syscall.AF_PACKET:
@@ -609,9 +609,9 @@ func printCapabilities(fieldValue string, base int) (string, error) {
 		return cap, nil
 	}
 	if base == 16 {
-		return fmt.Sprintf("unknown capability(0x%d)", ival), nil
+		return "unknown capability(0x" + strconv.FormatInt(int64(ival), 10) + ")", nil
 	}
-	return fmt.Sprintf("unknown capability(%d)", ival), nil
+	return "unknown capability(" + strconv.FormatInt(int64(ival), 10) + ")", nil
 }
 
 func printSuccess(fieldValue string) (string, error) {
@@ -727,7 +727,7 @@ func printA0(fieldValue string, sysNum string) (string, error) {
 		return printIpcCall(fieldValue, 16)
 	}
 
-	return fmt.Sprintf("0x%s", fieldValue), nil
+	return "0x" + fieldValue, nil
 }
 
 func printSignals(fieldValue string, base int) (string, error) {
@@ -740,16 +740,16 @@ func printSignals(fieldValue string, base int) (string, error) {
 		return headers.SignalLookup[int(ival)], nil
 	}
 	if base == 16 {
-		return fmt.Sprintf("unknown signal (0x%s)", fieldValue), nil
+		return "unknown signal (0x" + fieldValue + ")", nil
 	}
-	return fmt.Sprintf("unknown signal (%s)", fieldValue), nil
+	return "unknown signal (" + fieldValue + ")", nil
 }
 
 func printDirFd(fieldValue string) (string, error) {
 	if fieldValue == "-100" {
 		return "AT_FDWD", nil
 	}
-	return fmt.Sprintf("0x%s", fieldValue), nil
+	return "0x" + fieldValue, nil
 }
 
 func printCloneFlags(fieldValue string) (string, error) {
@@ -775,7 +775,7 @@ func printCloneFlags(fieldValue string) (string, error) {
 		name += headers.SignalLookup[int(cloneSignal)]
 	}
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%d", ival), nil
+		return "0x" + strconv.FormatInt(int64(ival), 10), nil
 	}
 	return name, nil
 }
@@ -788,7 +788,7 @@ func printClockID(fieldValue string) (string, error) {
 	if ival < 7 {
 		return headers.ClockLookup[int(ival)], nil
 	}
-	return fmt.Sprintf("unknown clk_id (0x%s)", fieldValue), nil
+	return "unknown clk_id (0x" + fieldValue + ")", nil
 }
 
 // TODO: add personality interpretation
@@ -803,7 +803,7 @@ func printPtrace(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "ptrace parsing failed")
 	}
 	if _, ok := headers.PtraceLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown ptrace (0x%s)", fieldValue), nil
+		return "unknown ptrace (0x" + fieldValue + ")", nil
 	}
 	return headers.PtraceLookup[int(ival)], nil
 }
@@ -814,7 +814,7 @@ func printPrctlOpt(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "prctl parsing failed")
 	}
 	if _, ok := headers.PrctlLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown prctl option (0x%s)", fieldValue), nil
+		return "unknown prctl option (0x" + fieldValue + ")", nil
 	}
 	return headers.PrctlLookup[int(ival)], nil
 }
@@ -825,7 +825,7 @@ func printSocketDomain(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "socket domain parsing failed")
 	}
 	if _, ok := headers.SocketFamLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown family (0x%s)", fieldValue), nil
+		return "unknown family (0x" + fieldValue + ")", nil
 	}
 	return headers.SocketFamLookup[int(ival)], nil
 
@@ -837,7 +837,7 @@ func printSocketCall(fieldValue string, base int) (string, error) {
 		return "", errors.Wrap(err, "socketcall parsing failed")
 	}
 	if _, ok := headers.SockLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown socketcall (0x%s)", fieldValue), nil
+		return "unknown socketcall (0x" + fieldValue + ")", nil
 	}
 	return headers.SockLookup[int(ival)], nil
 }
@@ -848,7 +848,7 @@ func printRLimit(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "rlimit parsing failed")
 	}
 	if _, ok := headers.RlimitLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown rlimit (0x%s)", fieldValue), nil
+		return "unknown rlimit (0x" + fieldValue + ")", nil
 	}
 	return headers.RlimitLookup[int(ival)], nil
 }
@@ -859,7 +859,7 @@ func printIpcCall(fieldValue string, base int) (string, error) {
 		return "", errors.Wrap(err, "ipccall parsing failed")
 	}
 	if _, ok := headers.IpccallLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown ipccall (%s)", fieldValue), nil
+		return "unknown ipccall (" + fieldValue + ")", nil
 	}
 	return headers.IpccallLookup[int(ival)], nil
 }
@@ -933,7 +933,7 @@ func printA1(fieldValue, sysNum string, a0 int) (string, error) {
 	} else if name == "ioctl" {
 		return printIoctlReq(fieldValue)
 	}
-	return fmt.Sprintf("0x%s", fieldValue), nil
+	return "0x" + fieldValue, nil
 }
 
 func printFcntlCmd(fieldValue string) (string, error) {
@@ -942,7 +942,7 @@ func printFcntlCmd(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "fcntl command parsing failed")
 	}
 	if _, ok := headers.FcntlLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown fcntl command(%d)", ival), nil
+		return "unknown fcntl command(" + strconv.FormatInt(int64(ival), 10) + ")", nil
 	}
 	return headers.FcntlLookup[int(ival)], nil
 }
@@ -953,7 +953,7 @@ func printSocketType(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "socket type parsing failed")
 	}
 	if _, ok := headers.SockTypeLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown socket type(%d)", ival), nil
+		return "unknown socket type(" + strconv.FormatInt(int64(ival), 10) + ")", nil
 	}
 	return headers.SockTypeLookup[int(ival)], nil
 }
@@ -965,7 +965,7 @@ func printSched(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "sched parsing failed")
 	}
 	if _, ok := headers.SchedLookup[int(ival)&0x0F]; !ok {
-		return fmt.Sprintf("unknown scheduler policy (0x%s)", fieldValue), nil
+		return "unknown scheduler policy (0x" + fieldValue + ")", nil
 	}
 	if ival&schedResetOnFork > 0 {
 		return headers.SchedLookup[int(ival)] + "|SCHED_RESET_ON_FORK", nil
@@ -1006,7 +1006,7 @@ func printAccess(fieldValue string) (string, error) {
 		}
 	}
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 	return name, nil
 }
@@ -1017,7 +1017,7 @@ func printEpollCtl(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "epoll parsing failed")
 	}
 	if _, ok := headers.EpollLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown epoll_ctl operation (%d)", ival), nil
+		return "unknown epoll_ctl operation (" + strconv.FormatInt(int64(ival), 10) + ")", nil
 	}
 	return headers.EpollLookup[int(ival)], nil
 }
@@ -1038,7 +1038,7 @@ func printUmount(fieldValue string) (string, error) {
 	}
 
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 	return name, nil
 }
@@ -1050,7 +1050,7 @@ func printIoctlReq(fieldValue string) (string, error) {
 	}
 
 	if _, ok := headers.IoctlLookup[int(ival)]; !ok {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 	return headers.IoctlLookup[int(ival)], nil
 }
@@ -1069,7 +1069,7 @@ func printSockOptLevel(fieldValue string) (string, error) {
 	// pure go implementation of getprotobynumber
 	// if not find by getprotobynumber use map
 	if _, ok := headers.SockOptLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown sockopt level (0x%s)", fieldValue), nil
+		return "unknown sockopt level (0x" + fieldValue + ")", nil
 	}
 	return headers.SockOptLookup[int(ival)], nil
 }
@@ -1123,7 +1123,7 @@ func printA2(fieldValue, sysNum string, a1 int) (string, error) {
 		} else if a1 == syscall.SOL_PACKET {
 			return printPktOptName(fieldValue)
 		}
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	} else if strings.HasPrefix(name, "o") {
 		if name == "openat" {
 			return printOpenFlags(fieldValue)
@@ -1178,7 +1178,7 @@ func printA2(fieldValue, sysNum string, a1 int) (string, error) {
 	} else if name == "tgkill" {
 		return printSignals(fieldValue, 16)
 	}
-	return fmt.Sprintf("0x%s", fieldValue), nil
+	return "0x" + fieldValue, nil
 }
 
 func printIPOptName(fieldValue string) (string, error) {
@@ -1187,7 +1187,7 @@ func printIPOptName(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "ip opt parsing failed")
 	}
 	if _, ok := headers.IpOptLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown ipopt name (0x%s)", fieldValue), nil
+		return "unknown ipopt name (0x" + fieldValue + ")", nil
 	}
 	return headers.IpOptLookup[int(ival)], nil
 }
@@ -1198,7 +1198,7 @@ func printIP6OptName(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "ip6 opt parsing failed")
 	}
 	if _, ok := headers.Ip6OptLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown ip6opt name (0x%s)", fieldValue), nil
+		return "unknown ip6opt name (0x" + fieldValue + ")", nil
 	}
 	return headers.Ip6OptLookup[int(ival)], nil
 }
@@ -1209,7 +1209,7 @@ func printTCPOptName(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "tcp opt parsing failed")
 	}
 	if _, ok := headers.TcpOptLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown tcpopt name (0x%s)", fieldValue), nil
+		return "unknown tcpopt name (0x" + fieldValue + ")", nil
 	}
 	return headers.TcpOptLookup[int(ival)], nil
 }
@@ -1225,7 +1225,7 @@ func printUDPOptName(fieldValue string) (string, error) {
 		return "UDP_ENCAP", nil
 	}
 
-	return fmt.Sprintf("unknown udpopt name (0x%s)", fieldValue), nil
+	return "unknown udpopt name (0x" + fieldValue + ")", nil
 }
 
 func printPktOptName(fieldValue string) (string, error) {
@@ -1234,7 +1234,7 @@ func printPktOptName(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "pkt opt parsing failed")
 	}
 	if _, ok := headers.PktOptLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown pktopt name (0x%s)", fieldValue), nil
+		return "unknown pktopt name (0x" + fieldValue + ")", nil
 	}
 	return headers.PktOptLookup[int(ival)], nil
 }
@@ -1286,7 +1286,7 @@ func printSHMFlags(fieldValue string) (string, error) {
 	name += tmode
 
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 
 	return name, nil
@@ -1316,7 +1316,7 @@ func printProt(fieldValue string, isMmap int) (string, error) {
 	}
 
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 
 	return name, nil
@@ -1335,7 +1335,7 @@ func printSockOptName(fieldValue string) (string, error) {
 				opt+=100;
 	*/
 	if _, ok := headers.SockOptNameLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown sockopt name (0x%s)", fieldValue), nil
+		return "unknown sockopt name (0x" + fieldValue + ")", nil
 	}
 	return headers.SockOptNameLookup[int(ival)], nil
 }
@@ -1356,7 +1356,7 @@ func printRecv(fieldValue string) (string, error) {
 	}
 
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 	return name, nil
 }
@@ -1368,7 +1368,7 @@ func printSeek(fieldValue string) (string, error) {
 	}
 	var whence = int(ival) & 0xFF
 	if _, ok := headers.SeekLookup[whence]; !ok {
-		return fmt.Sprintf("unknown whence(0x%s)", fieldValue), nil
+		return "unknown whence(0x" + fieldValue + ")", nil
 	}
 	return headers.SeekLookup[whence], nil
 }
@@ -1402,7 +1402,7 @@ func printA3(fieldValue, sysNum string) (string, error) {
 			return printRecv(fieldValue)
 		}
 	}
-	return fmt.Sprintf("0x%s", fieldValue), nil
+	return "0x" + fieldValue, nil
 }
 
 func printMmap(fieldValue string) (string, error) {
@@ -1424,7 +1424,7 @@ func printMmap(fieldValue string) (string, error) {
 	}
 
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 	return name, nil
 }
@@ -1445,7 +1445,7 @@ func printMount(fieldValue string) (string, error) {
 	}
 
 	if len(name) == 0 {
-		return fmt.Sprintf("0x%s", fieldValue), nil
+		return "0x" + fieldValue, nil
 	}
 	return name, nil
 }
@@ -1463,7 +1463,7 @@ func printNFProto(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "netfilter protocol parsing failed")
 	}
 	if _, ok := headers.NfProtoLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown netfilter protocol (%s)", fieldValue), nil
+		return "unknown netfilter protocol (" + fieldValue + ")", nil
 	}
 	return headers.NfProtoLookup[int(ival)], nil
 }
@@ -1474,7 +1474,7 @@ func printICMP(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "icmp type parsing failed")
 	}
 	if _, ok := headers.IcmpLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown icmp type (%s)", fieldValue), nil
+		return "unknown icmp type (" + fieldValue + ")", nil
 	}
 	return headers.IcmpLookup[int(ival)], nil
 }
@@ -1493,7 +1493,7 @@ func printSeccompCode(fieldValue string) (string, error) {
 	}
 	var SECCOMPRETACTION = 0x7fff0000
 	if _, ok := headers.SeccompCodeLookUp[int(ival)&SECCOMPRETACTION]; !ok {
-		return fmt.Sprintf("unknown seccomp code (%s)", fieldValue), nil
+		return "unknown seccomp code (" + fieldValue + ")", nil
 	}
 	return headers.SeccompCodeLookUp[int(ival)&SECCOMPRETACTION], nil
 }
@@ -1504,7 +1504,7 @@ func printList(fieldValue string) (string, error) {
 		return "", errors.Wrap(err, "list parsing failed")
 	}
 	if _, ok := flagLookup[int(ival)]; !ok {
-		return fmt.Sprintf("unknown list (%s)", fieldValue), nil
+		return "unknown list (" + fieldValue + ")", nil
 	}
 	return flagLookup[int(ival)], nil
 }
