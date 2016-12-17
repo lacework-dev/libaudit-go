@@ -503,6 +503,10 @@ func auditAddRuleData(s Netlink, rule *AuditRuleData, flags int, action int) err
 	if err = s.Send(newwb); err != nil {
 		return errors.Wrap(err, "auditAddRuleData failed")
 	}
+	err = auditGetReply(s, syscall.Getpagesize(), 0, newwb.Header.Seq)
+	if err != nil {
+		return errors.Wrap(err, "AuditAddRule failed")
+	}
 	return nil
 }
 
