@@ -65,6 +65,9 @@ func auditDeleteRuleData(s Netlink, rule *AuditRuleData, flags uint32, action ui
 	if err := s.Send(newwb); err != nil {
 		return errors.Wrap(err, "auditDeleteRuleData failed")
 	}
+	if err := auditGetReply(s, syscall.Getpagesize(), 0, newwb.Header.Seq); err != nil {
+		return errors.Wrap(err, "auditDeleteRuleData failed")
+	}
 	return nil
 }
 
@@ -86,17 +89,20 @@ func isAuditRulePresent(a *AuditRuleData, b []*AuditRuleData) bool {
 	return false
 }
 
-func RemoveOverlappingAuditRules(set, subset []*AuditRuleData) []*AuditRuleData {
-	if len(set) != 0 && len(subset) != 0 {
-	restart:
-		for i := range subset {
-			if isAuditRulePresent(subset[i], set) == true {
-				subset = append(subset[:i], subset[i+1:]...)
-				break restart
+func RemoveStaleLWAuditRules(s Netlink, ruleArray []*AuditRuleData) error {
+	if len(ruleArray) != 0 && len(ruleArray) != 0 {
+		for _, r := range ruleArray {
+			printed := printRule(r)
+			str := strings.ToLower(printed)
+			if strings.Contains(str, "key=lw_") == true {
+				err := auditDeleteRuleData(s, r, r.Flags, r.Action)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
-	return subset
+	return nil
 }
 
 func CleanupRules(s Netlink, ruleDeleteArray []*AuditRuleData) error {
@@ -503,8 +509,7 @@ func auditAddRuleData(s Netlink, rule *AuditRuleData, flags int, action int) err
 	if err = s.Send(newwb); err != nil {
 		return errors.Wrap(err, "auditAddRuleData failed")
 	}
-	err = auditGetReply(s, syscall.Getpagesize(), 0, newwb.Header.Seq)
-	if err != nil {
+	if err := auditGetReply(s, syscall.Getpagesize(), 0, newwb.Header.Seq); err != nil {
 		return errors.Wrap(err, "AuditAddRule failed")
 	}
 	return nil

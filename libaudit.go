@@ -347,7 +347,19 @@ done:
 				return errors.Wrap(err, "auditGetReply msg parsing failed")
 			}
 			if h.Seq != seq {
-				return fmt.Errorf("auditGetReply: Wrong Seq nr %d, expected %d", h.Seq, seq)
+				if h.Type > uint16(AUDIT_FIRST_USER_MSG) {
+					//fmt.Printf("Seq: %v->Header: %v, data: %v\n", seq, h, dbuf)
+					break done
+				}
+				if h.Type == syscall.NLMSG_ERROR {
+					e := int32(nativeEndian().Uint32(dbuf[0:4]))
+					if e == 0 || e == 17 { // EEXIST
+						break done
+					} else {
+						return fmt.Errorf("auditGetReply: error while recieving reply -%d", e)
+					}
+				}
+				return fmt.Errorf("auditGetReply: Type %v Wrong Seq nr %d, expected %d", h.Type, h.Seq, seq)
 			}
 			if int(h.Pid) != socketPID {
 				return fmt.Errorf("auditGetReply: Wrong pid %d, expected %d", h.Pid, socketPID)
@@ -357,7 +369,7 @@ done:
 			}
 			if h.Type == syscall.NLMSG_ERROR {
 				e := int32(nativeEndian().Uint32(dbuf[0:4]))
-				if e == 0 {
+				if e == 0 || e == 17 { // EEXIST
 					break done
 				} else {
 					return fmt.Errorf("auditGetReply: error while recieving reply -%d", e)
@@ -470,7 +482,7 @@ done:
 			}
 
 			if h.Seq != uint32(wb.Header.Seq) {
-				return -1, -1, fmt.Errorf("AuditIsEnabled: Wrong Seq nr %d, expected %d", h.Seq, wb.Header.Seq)
+				return -1, -1, fmt.Errorf("AuditIsEnabled: Type %v Wrong Seq nr %d, expected %d\nData %v", h.Type, h.Seq, wb.Header.Seq, b)
 			}
 			if h.Type == syscall.NLMSG_DONE {
 				break done
