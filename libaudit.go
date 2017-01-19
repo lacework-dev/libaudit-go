@@ -325,7 +325,7 @@ func (s *NetlinkConnection) GetPID() (int, error) {
 
 func (s *NetlinkConnection) SetsockRecvTO(recvto int64) error {
 	var tv syscall.Timeval
-	tv = syscall.Timeval{recvto / 1000, (recvto % 1000) * 1000}
+	tv = syscall.Timeval{Sec: recvto / 1000, Usec: (recvto % 1000) * 1000}
 	return syscall.SetsockoptTimeval(s.fd, 1 /*SOL_SOCKET*/, 20 /*SO_RECVTIMEO*/, &tv)
 }
 
