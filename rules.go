@@ -89,7 +89,8 @@ func isAuditRulePresent(a *AuditRuleData, b []*AuditRuleData) bool {
 	return false
 }
 
-func RemoveStaleLWAuditRules(s Netlink, ruleArray []*AuditRuleData) error {
+func RemoveStaleLWAuditRules(s Netlink, ruleArray []*AuditRuleData) (string, error) {
+	var toString string
 	if len(ruleArray) != 0 && len(ruleArray) != 0 {
 		for _, r := range ruleArray {
 			printed := printRule(r)
@@ -97,12 +98,14 @@ func RemoveStaleLWAuditRules(s Netlink, ruleArray []*AuditRuleData) error {
 			if strings.Contains(str, "key=lw_") == true {
 				err := auditDeleteRuleData(s, r, r.Flags, r.Action)
 				if err != nil {
-					return err
+					return toString, err
 				}
+			} else {
+				toString += str
 			}
 		}
 	}
-	return nil
+	return toString, nil
 }
 
 func CleanupRules(s Netlink, ruleDeleteArray []*AuditRuleData) error {
