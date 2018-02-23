@@ -95,7 +95,7 @@ func RemoveStaleLWAuditRules(s Netlink, ruleArray []*AuditRuleData) (string, err
 		for _, r := range ruleArray {
 			printed := printRule(r)
 			str := strings.ToLower(printed)
-			if strings.Contains(str, "key=lw_") == true {
+			if strings.Contains(str, "key=lw_") == true || strings.Contains(str, "-k lw_") == true {
 				err := auditDeleteRuleData(s, r, r.Flags, r.Action)
 				if err != nil {
 					return toString, err
