@@ -152,7 +152,7 @@ done:
 			if m.Header.Seq != uint32(wb.Header.Seq) {
 				return fmt.Errorf("DeleteAllRules: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
 			}
-			if int(m.Header.Pid) != socketPID {
+			if int(m.Header.Pid) > 0 && int(m.Header.Pid) != socketPID {
 				return fmt.Errorf("DeleteAllRules: Wrong PID %d, expected %d", m.Header.Pid, socketPID)
 			}
 			if m.Header.Type == syscall.NLMSG_DONE {
@@ -645,7 +645,7 @@ func SetRules(s Netlink, content []byte) ([]*AuditRuleData, error) {
 
 				err = auditAddRuleData(s, &ruleData, add, action)
 				if err != nil {
-					return nil, errors.Wrap(err, "SetRules failed")
+					return nil, errors.Wrap(err, fmt.Sprintf("SetRules failed %+v", ruleData))
 				}
 				ruleArray = append(ruleArray, &ruleData)
 			}
@@ -739,7 +739,7 @@ func SetRules(s Netlink, content []byte) ([]*AuditRuleData, error) {
 				if filter != AUDIT_FILTER_UNSET {
 					err = auditAddRuleData(s, &ruleData, filter, action)
 					if err != nil {
-						return nil, errors.Wrap(err, "SetRules failed")
+						return nil, errors.Wrap(err, fmt.Sprintf("SetRules failed %+v", ruleData))
 					}
 					ruleArray = append(ruleArray, &ruleData)
 				} else {
@@ -937,7 +937,7 @@ done:
 			if m.Header.Seq != wb.Header.Seq {
 				return nil, nil, fmt.Errorf("ListAllRules: Wrong Seq nr %d, expected %d", m.Header.Seq, wb.Header.Seq)
 			}
-			if int(m.Header.Pid) != socketPID {
+			if int(m.Header.Pid) > 0 && int(m.Header.Pid) != socketPID {
 				return nil, nil, fmt.Errorf("ListAllRules: Wrong pid %d, expected %d", m.Header.Pid, socketPID)
 			}
 			if m.Header.Type == syscall.NLMSG_DONE {
