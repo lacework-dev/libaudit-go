@@ -14,11 +14,12 @@ type record struct {
 	a1         int
 }
 
+var reEventRegex = regexp.MustCompile(`audit\((?P<timestamp>\d+\.\d+):(?P<serial>\d+)\): (.*)$`)
+
 // ParseAuditEventRegex takes an audit event message and returns the essentials to form an AuditEvent struct
 // regex used in the function should always match for a proper audit event
 func ParseAuditEventRegex(str string) (serial string, timestamp string, m map[string]string, err error) {
-	re := regexp.MustCompile(`audit\((?P<timestamp>\d+\.\d+):(?P<serial>\d+)\): (.*)$`)
-	match := re.FindStringSubmatch(str)
+	match := reEventRegex.FindStringSubmatch(str)
 
 	if len(match) != 4 {
 		err = fmt.Errorf("parsing failed: malformed audit message")
