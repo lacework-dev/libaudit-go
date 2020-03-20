@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/lacework/libaudit-go/headers"
+	"github.com/lacework-dev/libaudit-go/headers"
 	"github.com/lunixbochs/struc"
 	"github.com/pkg/errors"
 )
